@@ -5,7 +5,7 @@
  * If a copy of the MPL was not distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { Inspector } from 'react-inspector'
 
 import DXClient from '@dxfeed/widgets-api/client'
@@ -66,49 +66,49 @@ function Playground() {
   const PreComponent = pre as React.FunctionComponent<{}>
   const H2Component = h2 as React.FunctionComponent<{}>
 
-  const [type, setType] = React.useState<'series' | 'timeSeries'>('timeSeries')
   const [urlString, setUrlString] = React.useState('')
   const [endpointUrl, setEndpointUrl] = React.useState('')
-  const [eventType, setEventType] = React.useState<EventType>(EventType.Candle)
+  const [eventType, setEventType] = React.useState<EventType>(EventType.Quote)
   const [symbolName, setSymbolName] = React.useState<string>(SYMBOLS[0])
 
-  const client = React.useRef<DXClient | null>()
+  const client = React.useRef<DXClient | null>(null)
+  const clientUrl = useRef<string | null>(null)
 
   const swapClient = React.useCallback((url: string) => {
-    if (client.current) {
-      client.current.close()
-      client.current = null
-    }
+    if (clientUrl.current !== url) {
+      if (client.current) {
+        client.current.close()
+        client.current = null
+      }
 
-    if (url !== '') {
-      client.current = new DXClient(url)
+      if (url !== '') {
+        client.current = new DXClient(url)
+        clientUrl.current = url
+      }
     }
   }, [])
 
   useEffect(() => () => client.current?.close(), [])
+
+  const VirtualDXClient = useMemo(
+    () =>
+      class Client {
+        constructor(url: string) {
+          swapClient(url)
+        }
+        connect = () => client.current?.connect()
+        close = () => client.current?.close()
+        subscribe = async (...args: Parameters<DXClient['subscribe']>) =>
+          client.current ? client.current.subscribe(...args) : new Promise(() => null)
+      },
+    []
+  )
 
   return (
     <>
       <H2Component>Configure</H2Component>
 
       <Grid container spacing={3}>
-        <Grid item lg={4} md={12} xs={12}>
-          <FormControl component="fieldset">
-            <FormLabel component="legend">Select type</FormLabel>
-            <RadioGroup
-              aria-label="type"
-              name="type"
-              value={type}
-              onChange={(event) => {
-                setType(event.target.value as any)
-              }}
-            >
-              <FormControlLabel value="series" control={<Radio />} label="Series" />
-              <FormControlLabel value="timeSeries" control={<Radio />} label="Time Series" />
-            </RadioGroup>
-          </FormControl>
-        </Grid>
-
         <Grid item lg={4} md={6} xs={12}>
           <FormControl component="fieldset">
             <FormLabel component="legend">Select Event Type</FormLabel>
@@ -116,11 +116,11 @@ function Playground() {
               aria-label="eventType"
               name="eventType"
               value={eventType}
-              onChange={(event) => {
+              onChange={event => {
                 setEventType(event.target.value as any)
               }}
             >
-              {Object.keys(EventType).map((key) => {
+              {Object.keys(EventType).map(key => {
                 const value = key as EventType
 
                 return (
@@ -138,11 +138,11 @@ function Playground() {
               aria-label="symbolName"
               name="symbolName"
               value={symbolName}
-              onChange={(event) => {
+              onChange={event => {
                 setSymbolName(event.target.value as any)
               }}
             >
-              {SYMBOLS.map((value) => (
+              {SYMBOLS.map(value => (
                 <FormControlLabel key={value} value={value} control={<Radio />} label={value} />
               ))}
             </RadioGroup>
@@ -151,58 +151,54 @@ function Playground() {
       </Grid>
       <H2Component>Example</H2Component>
       <PreComponent>
-        Example demonstrates how to work with it in <b>React</b>. You have to provide the endpoint
-        URL.
+        Example demonstrates how to work with it in <b>React</b>.
+        <br />
+        <br />
+        For debugging you need to look at the console.
       </PreComponent>
 
       <Box width="100%" marginTop="12px" marginBottom="12px">
         <TextField
           fullWidth
+          label="You must provide the endpoint URL first:"
           value={urlString}
-          onChange={(e) => setUrlString(e.target.value)}
+          required
+          onChange={e => setUrlString(e.target.value)}
           InputProps={{
-            endAdornment: (
+            endAdornment: endpointUrl !== urlString && (
               <Button variant="outlined" onClick={() => setEndpointUrl(urlString)}>
-                Submit
+                Connect
               </Button>
             ),
           }}
         />
       </Box>
 
-      <PlaygroundComponent
-        scope={{
-          DXClient: class Client {
-            constructor(url: string) {
-              swapClient(url)
-            }
-            connect = () => client.current?.connect()
-            close = () => client.current?.close()
-            subscribe = async (...args: Parameters<DXClient['subscribe']>) =>
-              client.current ? client.current.subscribe(...args) : new Promise(() => null)
-          },
-          Button,
-          DataViewer,
-          ...SUBSCRIPTIONS_MAP,
-        }}
-        language="js"
-        code={`() => {
+      {endpointUrl && (
+        <PlaygroundComponent
+          scope={{
+            DXClient: VirtualDXClient,
+            Button,
+            DataViewer,
+            ENDPOINT_URL: endpointUrl,
+            ...SUBSCRIPTIONS_MAP,
+          }}
+          language="js"
+          code={`() => {
   const [play, setPlay] = React.useState(false)
   const [events, setEvents] = React.useState([])
   const handleEvent = React.useCallback((event) => {
     setEvents((prevState) => [...prevState, event])
   }, [])
     
-  const ENDPOINT_URL = '${endpointUrl}'
-    
-  const feed = React.useMemo(() => new DXClient(ENDPOINT_URL), [])
+  const client = React.useMemo(() => new DXClient(ENDPOINT_URL), [])
     
   const unsubscribeRef = React.useRef()
     
   React.useEffect(() => {
     if (play) {
       setEvents([])
-      void feed.subscribe(new ${eventType}Subscription(['${symbolName}'])).then((subscription) =>
+      void client.subscribe(new ${eventType}Subscription(['${symbolName}'])).then((subscription) =>
         subscription.getStream().subscribe({
           onSubscribe: (sub) => {
             sub.request(Number.MAX_SAFE_INTEGER)
@@ -228,7 +224,8 @@ function Playground() {
     </>
   )
 }`}
-      />
+        />
+      )}
     </>
   )
 }
