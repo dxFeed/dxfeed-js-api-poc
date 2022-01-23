@@ -3,6 +3,7 @@ export default {
   dest: '/dist',
   menu: [
     'Getting Started',
+    'Basic Usage',
     'Playground',
   ],
   title: '@dxfeed/widgets-api',

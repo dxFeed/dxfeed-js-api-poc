@@ -1,0 +1,119 @@
+---
+name: Basic Usage
+route: /basic-usage
+---
+
+# Basic Usage
+
+## Import package
+
+```ts
+import DXClient from '@dxfeed/widgets-api'
+```
+
+## Configure & Create connection
+
+Create instance of DXClient and set web socket address and open connection.
+
+```ts
+import DXClient from '@dxfeed/widgets-api'
+
+const client = new DXClient('wss://CLIENT_NAME.dxfeed.com/api/rsocket')
+```
+
+## Configure & Create subscription
+You should specify the record and the requested symbols.
+
+```ts
+import { QuoteSubscription } from '@dxfeed/widgets-api/records/Quote'
+
+const subscription = await client.subscribe(
+  new QuoteSubscription(
+    ['AAPL'] /* symbols */
+  )
+)
+```
+
+The full list of records can be found here:
+```js
+import { /* Subscription */ } from '@dxfeed/widgets-api/records/*'
+```
+
+You can also request only specific fields, not the entire event.
+```ts
+client.subscribe(
+  new QuoteSubscription(
+    symbols,
+    ['eventSymbol', 'bidPrice'] /* fields */
+  )
+)
+```
+
+For timed subscription you should also provide time to start subscription from.
+
+```ts
+client.subscribe(
+  new TimeAndSaleSubscription(
+    symbols,
+    fields,
+    1500000000000 /* from time */
+  )
+)
+```
+
+## Change symbols in subscription
+
+### Add symbols
+
+```ts
+subscription.addSymbols(['MSFT'])
+```
+
+### Remove symbols
+
+```ts
+subscription.removeSymbols(['AAPL'])
+```
+
+## Get events from stream
+After an open subscription, you can listen to events from the stream.
+
+```ts
+const stream = subscription.getStream()
+
+stream.subscribe({
+  onSubscribe: sub => {
+    sub.request(Number.MAX_SAFE_INTEGER) // set backpressure
+  },
+  onNext: handleEvents,
+})
+```
+
+`onNext` its event handler for process incoming events.
+
+```ts
+import { Quote } from '@dxfeed/widgets-api/records/Quote'
+
+const handleEvents = (events: Quote[]) => {
+  /* process events */
+}
+```
+
+## Close subscription stream
+All `onSubscribe` callbacks that are called with a subscription, you need to call the `subs.close` method to close the stream.
+
+```ts
+stream.subscribe({
+  onSubscribe: sub => {
+    setTimeout(() => sub.close(), 5000) // close after 5s
+  },
+  onNext: console.log,
+})
+```
+
+## Close connection
+If you need to close the web socket connection
+
+```ts
+client.close()
+```
