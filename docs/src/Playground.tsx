@@ -44,6 +44,8 @@ enum EventType {
     Underlying = "Underlying",
 }
 
+type SubscriptionType = "series" | "timeSeries"
+
 const DataViewer = ({ play, events }: { play: boolean; events: unknown[] }) =>
     (play || events.length > 0) && (
         <Grid style={{ marginTop: 5 }} container spacing={3}>
@@ -66,15 +68,13 @@ function Playground() {
     const PreComponent = pre as React.FunctionComponent<{}>
     const H2Component = h2 as React.FunctionComponent<{}>
 
-    const [type, setType] = React.useState("timeSeries")
+    const [type, setType] = React.useState<SubscriptionType>("timeSeries")
     const [urlString, setUrlString] = React.useState("")
     const [endpointUrl, setEndpointUrl] = React.useState("")
     const [eventType, setEventType] = React.useState<EventType>(
         EventType.Candle
     )
     const [symbolName, setSymbolName] = React.useState<string>(SYMBOLS[0])
-    const [fieldsString, setFieldsString] = React.useState("")
-    const [fields, setFields] = React.useState<string[]>([])
 
     const client = React.useRef<DXClient | null>(null)
     const clientUrl = useRef<string | null>(null)
@@ -94,12 +94,6 @@ function Playground() {
     }, [])
 
     useEffect(() => () => client.current?.close(), [])
-
-    useEffect(() => {
-        if (fieldsString.length === 0 && fields.length > 0) {
-            setFields([])
-        }
-    }, [fields, fieldsString])
 
     const VirtualDXClient = useMemo(
         () =>
@@ -121,17 +115,11 @@ function Playground() {
 
     const stringifiedFieldsParam = useMemo(() => {
         if (type === "timeSeries") {
-            return JSON.stringify(
-                ["eventSymbol", "eventFlags"].concat(
-                    fields.length > 0 ? fields : []
-                )
-            )
+            return ", undefined"
         }
 
-        return fields.length > 0
-            ? JSON.stringify(["eventSymbol"].concat(fields))
-            : undefined
-    }, [fields, type])
+        return ""
+    }, [type])
 
     const dayStart = useMemo(() => {
         const start = new Date()
@@ -152,7 +140,7 @@ function Playground() {
                             name="type"
                             value={type}
                             onChange={(event) => {
-                                setType(event.target.value)
+                                setType(event.target.value as SubscriptionType)
                             }}
                         >
                             <FormControlLabel
@@ -234,31 +222,6 @@ function Playground() {
             <Box width="100%" marginTop="12px" marginBottom="12px">
                 <TextField
                     fullWidth
-                    label="You can provide a list of record fields (separated by comma):"
-                    value={fieldsString}
-                    onChange={(e) => setFieldsString(e.target.value)}
-                    InputProps={{
-                        endAdornment: fieldsString && (
-                            <Button
-                                variant="outlined"
-                                onClick={() =>
-                                    setFields(
-                                        fieldsString
-                                            .split(",")
-                                            .map((str) => str.trim())
-                                    )
-                                }
-                            >
-                                Submit
-                            </Button>
-                        ),
-                    }}
-                />
-            </Box>
-
-            <Box width="100%" marginTop="12px" marginBottom="12px">
-                <TextField
-                    fullWidth
                     label="You must provide the endpoint URL first:"
                     value={urlString}
                     required
@@ -289,8 +252,8 @@ function Playground() {
                     code={`() => {
   const [play, setPlay] = React.useState(false)
   const [events, setEvents] = React.useState([])
-  const handleEvent = React.useCallback((event) => {
-    setEvents((prevState) => [...prevState, event])
+  const handleEvents = React.useCallback((events) => {
+    setEvents((prevState) => [...prevState, ...events])
   }, [])
     
   const client = React.useMemo(() => new DXClient(ENDPOINT_URL), [])
@@ -301,18 +264,16 @@ function Playground() {
     if (play) {
       setEvents([])
       
-      const subscription = new ${eventType}Subscription(['${symbolName}']${
-                        stringifiedFieldsParam
-                            ? ", ".concat(stringifiedFieldsParam)
-                            : ""
-                    }${type === "timeSeries" ? `, ${dayStart}` : ""})
+      const subscription = new ${eventType}Subscription(['${symbolName}']${stringifiedFieldsParam}${
+                        type === "timeSeries" ? `, ${dayStart}` : ""
+                    })
       void client.subscribe(subscription).then((subscription) =>
         subscription.getStream().subscribe({
           onSubscribe: (sub) => {
             sub.request(Number.MAX_SAFE_INTEGER)
             unsubscribeRef.current = () => sub.cancel()
           },
-          onNext: (events) => events.forEach(event => setTimeout(() => handleEvent(event), 0)),
+          onNext: handleEvents,
         })
       )
     } else {
