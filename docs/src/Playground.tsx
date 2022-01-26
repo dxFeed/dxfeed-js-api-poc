@@ -69,7 +69,9 @@ function Playground() {
     const [type, setType] = React.useState("timeSeries")
     const [urlString, setUrlString] = React.useState("")
     const [endpointUrl, setEndpointUrl] = React.useState("")
-    const [eventType, setEventType] = React.useState<EventType>(EventType.Quote)
+    const [eventType, setEventType] = React.useState<EventType>(
+        EventType.Candle
+    )
     const [symbolName, setSymbolName] = React.useState<string>(SYMBOLS[0])
     const [fieldsString, setFieldsString] = React.useState("")
     const [fields, setFields] = React.useState<string[]>([])
@@ -117,15 +119,25 @@ function Playground() {
         []
     )
 
-    const stringifiedFieldsList = useMemo(
-        () =>
-            ["eventSymbol"]
-                .concat(type === "timeSeries" ? "eventFlags" : [])
-                .concat(fields.length > 0 ? fields : [])
-                .map((field) => `'${field}'`)
-                .join(", "),
-        [fields, type]
-    )
+    const stringifiedFieldsParam = useMemo(() => {
+        if (type === "timeSeries") {
+            return JSON.stringify(
+                ["eventSymbol", "eventFlags"].concat(
+                    fields.length > 0 ? fields : []
+                )
+            )
+        }
+
+        return fields.length > 0
+            ? JSON.stringify(["eventSymbol"].concat(fields))
+            : undefined
+    }, [fields, type])
+
+    const dayStart = useMemo(() => {
+        const start = new Date()
+        start.setHours(0, 0, 0, 0)
+        return start.getTime()
+    }, [])
 
     return (
         <>
@@ -289,18 +301,18 @@ function Playground() {
     if (play) {
       setEvents([])
       
-      const fields = [${stringifiedFieldsList}]
-
-      const subscription = new ${eventType}Subscription(['${symbolName}'], fields${
-                        type === "timeSeries" ? `, new Date().getTime()` : ""
-                    })
+      const subscription = new ${eventType}Subscription(['${symbolName}']${
+                        stringifiedFieldsParam
+                            ? ", ".concat(stringifiedFieldsParam)
+                            : ""
+                    }${type === "timeSeries" ? `, ${dayStart}` : ""})
       void client.subscribe(subscription).then((subscription) =>
         subscription.getStream().subscribe({
           onSubscribe: (sub) => {
             sub.request(Number.MAX_SAFE_INTEGER)
             unsubscribeRef.current = () => sub.cancel()
           },
-          onNext: (events) => events.forEach(handleEvent),
+          onNext: (events) => events.forEach(event => setTimeout(() => handleEvent(event), 0)),
         })
       )
     } else {
