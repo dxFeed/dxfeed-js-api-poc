@@ -39,7 +39,7 @@ The full list of records can be found here:
 import { /* Subscription */ } from '@dxfeed/widgets-api/records/*'
 ```
 
-You can also request only specific fields, not the entire event.
+You can specify fields you want to request for each type of event. This can be achieved by passing a list of them as a second parameter of `Subscription`. If no value provided (i.e. parameter is `undefined`), a default set of fields will be requested. List of event types with all available fields for each of them can be found [here](https://studio.asyncapi.com/?url=https://dxfeed-demo.s3.amazonaws.com/dxFeed-WebApi-alpha.yaml).
 ```ts
 client.subscribe(
   new QuoteSubscription(
@@ -48,15 +48,46 @@ client.subscribe(
   )
 )
 ```
+NOTE: `eventSymbol` field is mandatory for all types of events. If you want to request a subset of fields, you must include `eventSymbol`.
+
+Some of the events may may be requested using timed subscription (i.e. with inclusion of historical data). These are: 
+
+- `Candle` 
+- `Greeks` 
+- `TheoPrice`
+- `TimeAndSale`
+- `Underlying`
 
 For timed subscription you should also provide time to start subscription from.
-
 ```ts
 client.subscribe(
-  new TimeAndSaleSubscription(
+  new CandleSubscription(
     symbols,
     fields,
     1500000000000 /* from time */
+  )
+)
+```
+
+NOTE: for timed events requested with custom selection of fields, an `eventFlags` field is also mandatory.
+```ts
+/* Timed subscription, requesting a default set of fields */
+
+client.subscribe(
+  new CandleSubscription(
+    symbols,
+    undefined,
+    1500000000000
+  )
+)
+
+/* Timed subscription, requesting a custom set of fields */
+
+client.subscribe(
+  new CandleSubscription(
+    symbols,
+    ['eventSymbol', 'eventFlags', 'high', 'low'],
+    1500000000000
   )
 )
 ```
